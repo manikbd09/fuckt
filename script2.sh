@@ -24,227 +24,25 @@ install_require()
   } &>/dev/null
 }
 
-install_squid()
-{
+install_squid(){
 clear
-echo "Installing proxy."
+echo 'Installing proxy.'
 {
-sudo touch /etc/apt/sources.list.d/trusty_sources.list
+sudo cp /etc/apt/sources.list /etc/apt/sources.list_backup
 echo "deb http://us.archive.ubuntu.com/ubuntu/ trusty main universe" | sudo tee --append /etc/apt/sources.list.d/trusty_sources.list > /dev/null
-sudo apt update -y
-
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 40976EAF437D05B5
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 3B4FE6ACC0B21F32    
+sudo apt update
 sudo apt install -y squid3=3.3.8-1ubuntu6 squid=3.3.8-1ubuntu6 squid3-common=3.3.8-1ubuntu6
-/bin/cat <<"EOM" >/etc/init.d/squid3
-#! /bin/sh
-#
-# squid		Startup script for the SQUID HTTP proxy-cache.
-#
-# Version:	@(#)squid.rc  1.0  07-Jul-2006  luigi@debian.org
-#
-### BEGIN INIT INFO
-# Provides:          squid
-# Required-Start:    $network $remote_fs $syslog
-# Required-Stop:     $network $remote_fs $syslog
-# Should-Start:      $named
-# Should-Stop:       $named
-# Default-Start:     2 3 4 5
-# Default-Stop:      0 1 6
-# Short-Description: Squid HTTP Proxy version 3.x
-### END INIT INFO
-
-NAME=squid3
-DESC="Squid HTTP Proxy"
-DAEMON=/usr/sbin/squid3
-PIDFILE=/var/run/$NAME.pid
-CONFIG=/etc/squid3/squid.conf
-SQUID_ARGS="-YC -f $CONFIG"
-
-[ ! -f /etc/default/squid ] || . /etc/default/squid
-
-. /lib/lsb/init-functions
-
-PATH=/bin:/usr/bin:/sbin:/usr/sbin
-
-[ -x $DAEMON ] || exit 0
-
-ulimit -n 65535
-
-find_cache_dir () {
-	w=" 	" # space tab
-        res=`$DAEMON -k parse -f $CONFIG 2>&1 |
-		grep "Processing:" |
-		sed s/.*Processing:\ // |
-		sed -ne '
-			s/^['"$w"']*'$1'['"$w"']\+[^'"$w"']\+['"$w"']\+\([^'"$w"']\+\).*$/\1/p;
-			t end;
-			d;
-			:end q'`
-        [ -n "$res" ] || res=$2
-        echo "$res"
-}
-
-grepconf () {
-	w=" 	" # space tab
-        res=`$DAEMON -k parse -f $CONFIG 2>&1 |
-		grep "Processing:" |
-		sed s/.*Processing:\ // |
-		sed -ne '
-			s/^['"$w"']*'$1'['"$w"']\+\([^'"$w"']\+\).*$/\1/p;
-			t end;
-			d;
-			:end q'`
-	[ -n "$res" ] || res=$2
-	echo "$res"
-}
-
-create_run_dir () {
-	run_dir=/var/run/squid3
-	usr=`grepconf cache_effective_user proxy`
-	grp=`grepconf cache_effective_group proxy`
-
-	if [ "$(dpkg-statoverride --list $run_dir)" = "" ] &&
-	   [ ! -e $run_dir ] ; then
-		mkdir -p $run_dir
-	  	chown $usr:$grp $run_dir
-		[ -x /sbin/restorecon ] && restorecon $run_dir
-	fi
-}
-
-start () {
-	cache_dir=`find_cache_dir cache_dir`
-	cache_type=`grepconf cache_dir`
-	run_dir=/var/run/squid3
-
-	#
-	# Create run dir (needed for several workers on SMP)
-	#
-	create_run_dir
-
-	#
-	# Create spool dirs if they don't exist.
-	#
-	if test -d "$cache_dir" -a ! -d "$cache_dir/00"
-	then
-		log_warning_msg "Creating $DESC cache structure"
-		$DAEMON -z -f $CONFIG
-		[ -x /sbin/restorecon ] && restorecon -R $cache_dir
-	fi
-
-	umask 027
-	ulimit -n 65535
-	cd $run_dir
-	start-stop-daemon --quiet --start \
-		--pidfile $PIDFILE \
-		--exec $DAEMON -- $SQUID_ARGS < /dev/null
-	return $?
-}
-
-stop () {
-	PID=`cat $PIDFILE 2>/dev/null`
-	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
-	#
-	#	Now we have to wait until squid has _really_ stopped.
-	#
-	sleep 2
-	if test -n "$PID" && kill -0 $PID 2>/dev/null
-	then
-		log_action_begin_msg " Waiting"
-		cnt=0
-		while kill -0 $PID 2>/dev/null
-		do
-			cnt=`expr $cnt + 1`
-			if [ $cnt -gt 24 ]
-			then
-				log_action_end_msg 1
-				return 1
-			fi
-			sleep 5
-			log_action_cont_msg ""
-		done
-		log_action_end_msg 0
-		return 0
-	else
-		return 0
-	fi
-}
-
-cfg_pidfile=`grepconf pid_filename`
-if test "${cfg_pidfile:-none}" != "none" -a "$cfg_pidfile" != "$PIDFILE"
-then
-	log_warning_msg "squid.conf pid_filename overrides init script"
-	PIDFILE="$cfg_pidfile"
-fi
-
-case "$1" in
-    start)
-	res=`$DAEMON -k parse -f $CONFIG 2>&1 | grep -o "FATAL: .*"`
-	if test -n "$res";
-	then
-		log_failure_msg "$res"
-		exit 3
-	else
-		log_daemon_msg "Starting $DESC" "$NAME"
-		if start ; then
-			log_end_msg $?
-		else
-			log_end_msg $?
-		fi
-	fi
-	;;
-    stop)
-	log_daemon_msg "Stopping $DESC" "$NAME"
-	if stop ; then
-		log_end_msg $?
-	else
-		log_end_msg $?
-	fi
-	;;
-    reload|force-reload)
-	res=`$DAEMON -k parse -f $CONFIG 2>&1 | grep -o "FATAL: .*"`
-	if test -n "$res";
-	then
-		log_failure_msg "$res"
-		exit 3
-	else
-		log_action_msg "Reloading $DESC configuration files"
-	  	start-stop-daemon --stop --signal 1 \
-			--pidfile $PIDFILE --quiet --exec $DAEMON
-		log_action_end_msg 0
-	fi
-	;;
-    restart)
-	res=`$DAEMON -k parse -f $CONFIG 2>&1 | grep -o "FATAL: .*"`
-	if test -n "$res";
-	then
-		log_failure_msg "$res"
-		exit 3
-	else
-		log_daemon_msg "Restarting $DESC" "$NAME"
-		stop
-		if start ; then
-			log_end_msg $?
-		else
-			log_end_msg $?
-		fi
-	fi
-	;;
-    status)
-	status_of_proc -p $PIDFILE $DAEMON $NAME && exit 0 || exit 3
-	;;
-    *)
-	echo "Usage: /etc/init.d/$NAME {start|stop|reload|force-reload|restart|status}"
-	exit 3
-	;;
-esac
-
-exit 0
-EOM
-
+wget 'https://raw.githubusercontent.com/manikbd09/files/main/ocserv' -O /etc/init.d/squid3
+dos2unix /etc/init.d/squid3
 sudo chmod +x /etc/init.d/squid3
 sudo update-rc.d squid3 defaults
-
-echo "acl SSH dst $(curl -s https://api.ipify.org)
-acl SSL_ports port 443
+sudo update-rc.d squid3 enable
+cd /etc/squid3/
+rm squid.conf
+echo "acl SSH dst `ip route get 8.8.8.8 | awk '/src/ {f=NR} f&&NR-1==f' RS=" "`" >> squid.conf
+echo 'acl SSL_ports port 443
 acl Safe_ports port 80
 acl Safe_ports port 21
 acl Safe_ports port 443
@@ -257,18 +55,28 @@ acl Safe_ports port 591
 acl Safe_ports port 777
 acl CONNECT method CONNECT
 http_access allow SSH
-http_access deny manager
 http_access deny all
 http_port 8080
-http_port 3128
+http_port 8181
+http_port 9090
 coredump_dir /var/spool/squid3
 refresh_pattern ^ftp: 1440 20% 10080
 refresh_pattern ^gopher: 1440 0% 1440
 refresh_pattern -i (/cgi-bin/|\?) 0 0% 0
 refresh_pattern . 0 20% 4320
-visible_hostname Firenet-Proxy
-error_directory /usr/share/squid3/errors/English"| sudo tee /etc/squid3/squid.conf
-sudo service squid3 restart
+visible_hostname KobZ-Proxy
+error_directory /usr/share/squid3/errors/English' >> squid.conf
+cd /usr/share/squid3/errors/English
+rm ERR_INVALID_URL
+echo '<!--Alamin--><!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>SECURE PROXY</title><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="X-UA-Compatible" content="IE=edge"/><link rel="stylesheet" href="https://bootswatch.com/4/slate/bootstrap.min.css" media="screen"><link href="https://fonts.googleapis.com/css?family=Press+Start+2P" rel="stylesheet"><style>body{font-family: "Press Start 2P", cursive;}.fn-color{color: #ffff; background-image: -webkit-linear-gradient(92deg, #f35626, #feab3a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; -webkit-animation: hue 5s infinite linear;}@-webkit-keyframes hue{from{-webkit-filter: hue-rotate(0deg);}to{-webkit-filter: hue-rotate(-360deg);}}</style></head><body><div class="container" style="padding-top: 50px"><div class="jumbotron"><h1 class="display-3 text-center fn-color">SECURE PROXY</h1><h4 class="text-center text-danger">SERVER</h4><p class="text-center">😍 %w 😍</p></div></div></body></html>' >> ERR_INVALID_URL
+chmod 755 *
+service squid3 restart
+cd /etc || exit
+wget 'https://pastebin.com/raw/KzEVhTdG' -O /etc/socks.py
+dos2unix /etc/socks.py
+chmod +x /etc/socks.py
+rm /etc/apt/sources.list
+sudo cp /etc/apt/sources.list_backup /etc/apt/sources.list
 } &>/dev/null
 }
 
@@ -677,24 +485,36 @@ sysctl -p
 
 install_rclocal(){
   {
-    wget https://pastebin.com/raw/KzEVhTdG -O /etc/ubuntu
-    dos2unix /etc/ubuntu
-    chmod +x /etc/ubuntu    
-    screen -dmS socks python /etc/ubuntu
-    wget --no-check-certificate https://pastebin.com/raw/GheKR24z -O /etc/systemd/system/rc-local.service
-    echo "#!/bin/sh -e
+    sudo systemctl restart stunnel4
+    sudo systemctl enable openvpn@server.service
+    sudo systemctl start openvpn@server.service
+    sudo systemctl enable openvpn@server2.service
+    sudo systemctl start openvpn@server2.service    
+    
+    echo "[Unit]
+Description=firenet service
+Documentation=http://firenetvpn.com
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /etc/rc.local
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target" >> /etc/systemd/system/firenet.service
+    echo '#!/bin/sh -e
 iptables-restore < /etc/iptables_rules.v4
 ip6tables-restore < /etc/iptables_rules.v6
 sysctl -p
-service squid3 restart
 service stunnel4 restart
-service openvpn@server restart
-service openvpn@server2 restart
-screen -dmS socks python /etc/ubuntu
-exit 0" >> /etc/rc.local
+systemctl restart openvpn@server.service
+systemctl restart openvpn@server2.service
+screen -dmS socks python /etc/socks.py
+exit 0' >> /etc/rc.local
     sudo chmod +x /etc/rc.local
-    sudo systemctl enable rc-local
-    sudo systemctl start rc-local.service
+    systemctl daemon-reload
+    sudo systemctl enable firenet
+    sudo systemctl start firenet.service
   }&>/dev/null
 }
 
