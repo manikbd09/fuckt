@@ -654,21 +654,20 @@ ulimit -n 512000
 
 
 
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o enp1s0 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o enp1s0 -j SNAT --to-source "$(curl ipecho.net/plain)"
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o eth0 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o eth0 -j SNAT --to-source "$(curl ipecho.net/plain)"
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o ens3 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 172.20.0.0/22 -o ens3 -j SNAT --to-source "$(curl ipecho.net/plain)"
-
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o eth0 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o eth0 -j SNAT --to-source "$(curl ipecho.net/plain)"
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o ens3 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o ens3 -j SNAT --to-source "$(curl ipecho.net/plain)"
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o enp1s0 -j MASQUERADE
-iptables -t nat -A POSTROUTING -s 173.20.0.0/22 -o enp1s0 -j SNAT --to-source "$(curl ipecho.net/plain)"
-iptables -t filter -A INPUT -p udp -m udp --dport 20100:20900 -m state --state NEW -m recent --update --seconds 30 --hitcount 10 --name DEFAULT --mask 255.255.255.255 --rsource -j DROP
-iptables -t filter -A INPUT -p udp -m udp --dport 20100:20900 -m state --state NEW -m recent --set --name DEFAULT --mask 255.255.255.255 --rsource
+sudo iptables -P INPUT ACCEPT
+sudo iptables -P FORWARD ACCEPT
+sudo iptables -P OUTPUT ACCEPT
+iptables -t nat -A POSTROUTING -s 172.20.0.0/21 -j SNAT --to "$(curl ipecho.net/plain)"
+iptables -t nat -A POSTROUTING -s 173.20.0.0/21 -j SNAT --to "$(curl ipecho.net/plain)"
+iptables -I INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 1194 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 8080 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 3128 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 8000 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 9090 -j ACCEPT
+iptables -I INPUT -p tcp -m tcp --dport 8040 -j ACCEPT
+iptables -I INPUT -p udp -m udp --dport 53 -j ACCEPT
 iptables-save > /etc/iptables_rules.v4
 ip6tables-save > /etc/iptables_rules.v6
 sysctl -p
